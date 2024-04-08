@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/mike-neck/zip-utils"
 	"github.com/urfave/cli/v2"
-	"hash/fnv"
 	"os"
 	"strings"
 )
@@ -107,14 +106,4 @@ func (lo ListOption) MakePrintFormat(index int, name string, f zip.FileHeader) s
 	}
 	outputs = append(outputs, name)
 	return strings.Join(outputs, " ")
-}
-
-func CalculateHash(index int, f zip.FileHeader) uint32 {
-	hf := fnv.New32a()
-	// time.Time 型の f.Modified を文字列にする
-	modified := f.Modified.Format("2006-01-02T15:04:05")
-	entry := fmt.Sprintf("%04d:%-60s:%s", index, f.Name, modified)
-	_, _ = hf.Write([]byte(entry))
-	hash := hf.Sum32()
-	return hash
 }

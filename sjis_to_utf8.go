@@ -1,8 +1,11 @@
 package charsets
 
 import (
+	"archive/zip"
+	"fmt"
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/transform"
+	"hash/fnv"
 )
 
 // SJISToUtf8 ShiftJISからUTF-8に変換する関数
