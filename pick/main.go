@@ -103,7 +103,7 @@ func main() {
 func pickupEntry(r *zip.Reader, targetFile string, destdir string) error {
 	for _, f := range r.File {
 		// エントリーのファイル名をShiftJISからUTF-8に変換する
-		entryFilename, err := charsets.SJISToUtf8(f.Name)
+		entryFilename, err := ziputils.SJISToUtf8(f.Name)
 		if err != nil {
 			return fmt.Errorf("error at PickupEntry#SJISToUtf8: %w", err)
 		}

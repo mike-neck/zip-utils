@@ -94,14 +94,14 @@ func (lo ListOption) ExtractFileName(name string) (string, error) {
 	if lo.RawString {
 		return name, nil
 	} else {
-		return charsets.SJISToUtf8(name)
+		return ziputils.SJISToUtf8(name)
 	}
 }
 
 func (lo ListOption) MakePrintFormat(index int, name string, f zip.FileHeader) string {
 	outputs := make([]string, 0)
 	if lo.ShowHash {
-		hash := CalculateHash(index, f)
+		hash := ziputils.CalculateHash(index, f)
 		outputs = append(outputs, fmt.Sprintf("%08x", hash))
 	}
 	outputs = append(outputs, name)
