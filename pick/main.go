@@ -3,9 +3,9 @@ package main
 import (
 	"archive/zip"
 	"errors"
-	"flag"
 	"fmt"
 	"github.com/mike-neck/zip-utils"
+	"github.com/urfave/cli/v2"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,86 +21,114 @@ type UserOption struct {
 
 // パラメーターをパースして、3つのパラメーターをまとめたデータを返す
 // エラーが発生した場合は、エラーを返す
-func parseParams() (*UserOption, error) {
-	// zipファイル名を指定するパラメーター
-	zipFilename := flag.String("i", "", "input zip file")
-
-	// zipファイルから取り出すファイル名を指定するパラメーター
-	fileToExtract := flag.String("f", "", "file to extract from zip")
-
-	// 展開先のディレクトリを指定するパラメーター
-	extractDir := flag.String("d", "", "directory to extract file to")
-
-	// コマンドライン引数を解析する
-	flag.Parse()
-
-	// 各パラメーターの値を取得する
-	if *zipFilename == "" || *fileToExtract == "" || *extractDir == "" {
-		slice := make([]string, 0)
-		slice = append(slice, "usage: pick-zip -i <zip file> -f <file to extract> -d <extract directory>\n")
-		if *zipFilename == "" {
-			slice = append(slice, "-z <zip file>")
-		} else {
-			slice = append(slice, fmt.Sprintf("-z %s", *zipFilename))
-		}
-		if *fileToExtract == "" {
-			slice = append(slice, "-f <file to extract>")
-		} else {
-			slice = append(slice, fmt.Sprintf("-f %s", *fileToExtract))
-		}
-		if *extractDir == "" {
-			slice = append(slice, "-d <extract directory>")
-		} else {
-			slice = append(slice, fmt.Sprintf("-d %s", *extractDir))
-		}
-		return nil, errors.New(strings.Join(slice, "\n"))
+func parseParams() (*UserOption, []cli.Flag) {
+	var uo UserOption
+	return &uo, []cli.Flag{
+		&cli.PathFlag{
+			Name:        "i",
+			Value:       "",
+			Usage:       "input zip file",
+			Destination: &uo.ZipFilename,
+		},
+		&cli.PathFlag{
+			Name:        "f",
+			Value:       "",
+			Usage:       "file to extract from zip",
+			Destination: &uo.FileToExtract,
+		},
+		&cli.PathFlag{
+			Name:        "d",
+			Value:       "",
+			Usage:       "directory to extract file to",
+			Destination: &uo.ExtractDir,
+		},
 	}
-
-	return &UserOption{*zipFilename, *fileToExtract, *extractDir}, nil
 }
 
 func main() {
-	uo, err := parseParams()
+	uo, flg := parseParams()
+
+	app := cli.App{
+		Name:  "pick-zip",
+		Usage: "extracts a single file from zip archive",
+		Flags: flg,
+		Action: func(context *cli.Context) error {
+			err := uo.PrepareDestDir()
+			if err != nil {
+				return fmt.Errorf("error at preparing dest dir: %w", err)
+			}
+
+			// zipファイルを開く
+			r, err := uo.OpenZipFile()
+			if err != nil {
+				return fmt.Errorf("error at openning zip file: %w", err)
+			}
+			//goland:noinspection GoUnhandledErrorResult
+			defer r.Close()
+
+			err = uo.PickUpEntry(&r.Reader)
+			if err != nil {
+				return fmt.Errorf("error at picking up file: %w", err)
+			}
+			fmt.Println(uo.FileToExtract, "picked up")
+			return nil
+		},
+		Before: func(context *cli.Context) error {
+			slice := make([]string, 0)
+			slice = append(slice, "missing parameters")
+			if uo.ZipFilename == "" {
+				slice = append(slice, "-i <zip file>")
+			}
+			if uo.FileToExtract == "" {
+				slice = append(slice, "-f <file to extract>")
+			}
+			if uo.ExtractDir == "" {
+				slice = append(slice, "-d <directory to extract file to>")
+			}
+			if len(slice) > 1 {
+				return errors.New(strings.Join(slice, "\n"))
+			}
+			return nil
+		},
+	}
+
+	err := app.Run(os.Args)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
+		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %s\n", err.Error())
 		os.Exit(1)
 	}
-	zipfile := uo.ZipFilename
-	filename := uo.FileToExtract
-	destdir := uo.ExtractDir
+}
 
-	if i, err := os.Stat(destdir); err != nil || !i.IsDir() {
+func (uo UserOption) PrepareDestDir() error {
+	if i, err := os.Stat(uo.ExtractDir); err != nil || !i.IsDir() {
 		if os.IsNotExist(err) {
-			_, _ = fmt.Fprintf(os.Stderr, "Error: destination directory %s does not exist.\n", destdir)
+			err := os.MkdirAll(uo.ExtractDir, 0755)
+			if err != nil {
+				return fmt.Errorf("failed to create dir[%s]: %w", uo.ExtractDir, err)
+			}
+		} else if i.IsDir() {
+			return fmt.Errorf("%s is a file, not directory", uo.ExtractDir)
 		} else {
-			_, _ = fmt.Fprintln(os.Stderr, err.Error())
+			return fmt.Errorf("failed to get dir[%s]: %w", uo.ExtractDir, err)
 		}
-		os.Exit(2)
 	}
+	return nil
+}
 
-	// zipファイルを開く
-	r, err := zip.OpenReader(zipfile)
+func (uo UserOption) OpenZipFile() (*zip.ReadCloser, error) {
+	r, err := zip.OpenReader(uo.ZipFilename)
 	if err != nil {
 		if os.IsNotExist(err) {
-			_, _ = fmt.Fprintf(os.Stderr, "Error: zip file %s does not exist.\n", zipfile)
+			return nil, fmt.Errorf("failed to open a zip file[%s]: file does not exist", uo.ZipFilename)
 		} else {
 			_, _ = fmt.Fprintln(os.Stderr, err.Error())
 		}
 		os.Exit(3)
 	}
-	//goland:noinspection GoUnhandledErrorResult
-	defer r.Close()
-
-	err = pickupEntry(&r.Reader, filename, destdir)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(10)
-	} else {
-		fmt.Println(filename, "picked up")
-	}
+	return r, nil
 }
 
-func pickupEntry(r *zip.Reader, targetFile string, destdir string) error {
+func (uo UserOption) PickUpEntry(r *zip.Reader) error {
 	for _, f := range r.File {
 		// エントリーのファイル名をShiftJISからUTF-8に変換する
 		entryFilename, err := ziputils.SJISToUtf8(f.Name)
@@ -109,17 +137,17 @@ func pickupEntry(r *zip.Reader, targetFile string, destdir string) error {
 		}
 
 		// 展開するファイルと一致する場合に展開する
-		if entryFilename == targetFile {
-			_, file := filepath.Split(targetFile)
-			err = extractFile(f, file, destdir)
+		if entryFilename == uo.FileToExtract {
+			_, file := filepath.Split(uo.FileToExtract)
+			err = extractFile(f, file, uo.ExtractDir)
 			if err != nil {
 				return fmt.Errorf("error at PickupEntry#extractFile: %w", err)
 			}
-			fmt.Printf("%s was extracted to %s\n", targetFile, file)
+			fmt.Printf("%s was extracted to %s\n", uo.FileToExtract, file)
 			return nil
 		}
 	}
-	return fmt.Errorf("file not found: %s", targetFile)
+	return fmt.Errorf("file not found: %s", uo.FileToExtract)
 }
 
 func extractFile(f *zip.File, targetFile string, destdir string) error {
