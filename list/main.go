@@ -107,6 +107,7 @@ func (lo ListOption) MakePrintFormat(index int, name string, f zip.FileHeader) s
 		}
 		hash := ziputils.CalculateHash(index, z)
 		outputs = append(outputs, fmt.Sprintf("%08x", hash))
+		outputs = append(outputs, fmt.Sprintf("non-utf-8:%v", f.NonUTF8))
 	}
 	outputs = append(outputs, name)
 	return strings.Join(outputs, " ")
