@@ -101,7 +101,11 @@ func (lo ListOption) ExtractFileName(name string) (string, error) {
 func (lo ListOption) MakePrintFormat(index int, name string, f zip.FileHeader) string {
 	outputs := make([]string, 0)
 	if lo.ShowHash {
-		hash := ziputils.CalculateHash(index, f)
+		z := ziputils.ZipEntry{
+			Name:     f.Name,
+			Modified: f.Modified,
+		}
+		hash := ziputils.CalculateHash(index, z)
 		outputs = append(outputs, fmt.Sprintf("%08x", hash))
 	}
 	outputs = append(outputs, name)
