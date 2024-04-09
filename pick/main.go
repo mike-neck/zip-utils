@@ -22,6 +22,24 @@ type TargetFile struct {
 	ExtractName string
 }
 
+var (
+	ExtractNameMissing = errors.New("missing extract name")
+	IdentifierMissing  = errors.New("missing identifier, archive-name or archive-hash required")
+)
+
+func (tf TargetFile) Validate() error {
+	if tf.ArchiveName != "" {
+		return nil
+	}
+	if tf.ArchiveHash != "" && tf.ExtractName != "" {
+		return nil
+	}
+	if tf.ArchiveHash != "" && tf.ExtractName == "" {
+		return ExtractNameMissing
+	}
+	return IdentifierMissing
+}
+
 // パラメーターをパースして、3つのパラメーターをまとめたデータを返す
 // エラーが発生した場合は、エラーを返す
 func parseParams() (*UserOption, []cli.Flag) {
@@ -105,8 +123,15 @@ func (uo UserOption) Validate() error {
 	if uo.ZipFilename == "" {
 		slice = append(slice, "-i <zip file>")
 	}
-	if uo.FileToExtract.ArchiveName == "" {
-		slice = append(slice, "-f <file to extract>")
+	err := uo.FileToExtract.Validate()
+	if err != nil {
+		switch {
+		case errors.Is(err, IdentifierMissing):
+			slice = append(slice, "-f <file to extract> or -x <hash of file to extract> + -n <file name>")
+			break
+		case errors.Is(err, ExtractNameMissing):
+			slice = append(slice, "-x option requires a more option -n <file name>")
+		}
 	}
 	if uo.ExtractDir == "" {
 		slice = append(slice, "-d <directory to extract file to>")
