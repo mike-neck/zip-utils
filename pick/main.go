@@ -53,42 +53,10 @@ func main() {
 		Usage: "extracts a single file from zip archive",
 		Flags: flg,
 		Action: func(context *cli.Context) error {
-			err := uo.PrepareDestDir()
-			if err != nil {
-				return fmt.Errorf("error at preparing dest dir: %w", err)
-			}
-
-			// zipファイルを開く
-			r, err := uo.OpenZipFile()
-			if err != nil {
-				return fmt.Errorf("error at openning zip file: %w", err)
-			}
-			//goland:noinspection GoUnhandledErrorResult
-			defer r.Close()
-
-			err = uo.PickUpEntry(&r.Reader)
-			if err != nil {
-				return fmt.Errorf("error at picking up file: %w", err)
-			}
-			fmt.Println(uo.FileToExtract, "picked up")
-			return nil
+			return uo.DoMain()
 		},
 		Before: func(context *cli.Context) error {
-			slice := make([]string, 0)
-			slice = append(slice, "missing parameters")
-			if uo.ZipFilename == "" {
-				slice = append(slice, "-i <zip file>")
-			}
-			if uo.FileToExtract == "" {
-				slice = append(slice, "-f <file to extract>")
-			}
-			if uo.ExtractDir == "" {
-				slice = append(slice, "-d <directory to extract file to>")
-			}
-			if len(slice) > 1 {
-				return errors.New(strings.Join(slice, "\n"))
-			}
-			return nil
+			return uo.Validate()
 		},
 	}
 
@@ -97,6 +65,46 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %s\n", err.Error())
 		os.Exit(1)
 	}
+}
+
+func (uo UserOption) DoMain() error {
+	err := uo.PrepareDestDir()
+	if err != nil {
+		return fmt.Errorf("error at preparing dest dir: %w", err)
+	}
+
+	// zipファイルを開く
+	r, err := uo.OpenZipFile()
+	if err != nil {
+		return fmt.Errorf("error at openning zip file: %w", err)
+	}
+	//goland:noinspection GoUnhandledErrorResult
+	defer r.Close()
+
+	err = uo.PickUpEntry(&r.Reader)
+	if err != nil {
+		return fmt.Errorf("error at picking up file: %w", err)
+	}
+	fmt.Println(uo.FileToExtract, "picked up")
+	return nil
+}
+
+func (uo UserOption) Validate() error {
+	slice := make([]string, 0)
+	slice = append(slice, "missing parameters")
+	if uo.ZipFilename == "" {
+		slice = append(slice, "-i <zip file>")
+	}
+	if uo.FileToExtract == "" {
+		slice = append(slice, "-f <file to extract>")
+	}
+	if uo.ExtractDir == "" {
+		slice = append(slice, "-d <directory to extract file to>")
+	}
+	if len(slice) > 1 {
+		return errors.New(strings.Join(slice, "\n"))
+	}
+	return nil
 }
 
 func (uo UserOption) PrepareDestDir() error {
