@@ -15,8 +15,18 @@ import (
 // UserOption 3つのパラメーターをまとめたデータ
 type UserOption struct {
 	ZipFilename   string
-	FileToExtract string
+	FileToExtract TargetFile
 	ExtractDir    string
+}
+
+// TargetFile 解凍するファイル
+type TargetFile struct {
+	// ArchiveName はファイル名称によるファイル指定方法
+	ArchiveName string
+	// ArchiveHash はハッシュ値によるファイル指定方法
+	ArchiveHash string
+	// ExtractName は解凍したファイルの名前(デフォルトは ArchiveName)
+	ExtractName string
 }
 
 // パラメーターをパースして、3つのパラメーターをまとめたデータを返す
@@ -34,7 +44,7 @@ func parseParams() (*UserOption, []cli.Flag) {
 			Name:        "f",
 			Value:       "",
 			Usage:       "file to extract from zip",
-			Destination: &uo.FileToExtract,
+			Destination: &uo.FileToExtract.ArchiveName,
 		},
 		&cli.PathFlag{
 			Name:        "d",
@@ -95,7 +105,7 @@ func (uo UserOption) Validate() error {
 	if uo.ZipFilename == "" {
 		slice = append(slice, "-i <zip file>")
 	}
-	if uo.FileToExtract == "" {
+	if uo.FileToExtract.ArchiveName == "" {
 		slice = append(slice, "-f <file to extract>")
 	}
 	if uo.ExtractDir == "" {
@@ -145,8 +155,8 @@ func (uo UserOption) PickUpEntry(r *zip.Reader) error {
 		}
 
 		// 展開するファイルと一致する場合に展開する
-		if entryFilename == uo.FileToExtract {
-			_, file := filepath.Split(uo.FileToExtract)
+		if entryFilename == uo.FileToExtract.ArchiveName {
+			_, file := filepath.Split(uo.FileToExtract.ArchiveName)
 			err = extractFile(f, file, uo.ExtractDir)
 			if err != nil {
 				return fmt.Errorf("error at PickupEntry#extractFile: %w", err)
