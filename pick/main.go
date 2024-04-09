@@ -12,13 +12,6 @@ import (
 	"strings"
 )
 
-// UserOption 3つのパラメーターをまとめたデータ
-type UserOption struct {
-	ZipFilename   string
-	FileToExtract TargetFile
-	ExtractDir    string
-}
-
 // TargetFile 解凍するファイル
 type TargetFile struct {
 	// ArchiveName はファイル名称によるファイル指定方法
@@ -75,6 +68,13 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %s\n", err.Error())
 		os.Exit(1)
 	}
+}
+
+// UserOption 3つのパラメーターをまとめたデータ
+type UserOption struct {
+	ZipFilename   string
+	FileToExtract TargetFile
+	ExtractDir    string
 }
 
 func (uo UserOption) DoMain() error {
