@@ -23,3 +23,12 @@ $(foreach item,$(ALL_NAMES),$(foreach arch,$(BUILD_ARCHS),$(eval $(call BuildTas
 
 .PHONY: all
 all: $(foreach item,$(ALL_NAMES),$(foreach arch,$(BUILD_ARCHS),$(item)-$(arch)))
+
+TEST_NAMES := $(foreach item,$(ALL_NAMES),$(item)-test)
+.PHONY: $(TEST_NAMES)
+$(TEST_NAMES):
+	@echo $(@)
+	@go test "$$(cut -d- -f1 <<< "$(@)")/"*.go
+
+.PHONY: test
+test: $(TEST_NAMES)
