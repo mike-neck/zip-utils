@@ -10,7 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+type GetTimeFunc interface {
+	GetTime() string
+}
 
 // TargetFile 解凍するファイル
 type TargetFile struct {
@@ -20,6 +25,9 @@ type TargetFile struct {
 	ArchiveHash string
 	// ExtractName は解凍したファイルの名前(デフォルトは ArchiveName)
 	ExtractName string
+
+	// GetTimeFunc は現在時刻を[分]まで取得する関数(デフォルトは nil )
+	GetTimeFunc
 }
 
 var (
@@ -40,6 +48,42 @@ func (tf TargetFile) Validate() error {
 	return IdentifierMissing
 }
 
+func (tf TargetFile) Matches(index int, zipEntry *zip.File) (bool, error) {
+	if tf.ArchiveName != "" {
+		if tf.ArchiveName == zipEntry.Name {
+			return true, nil
+		}
+		utf8, err := ziputils.SJISToUtf8(zipEntry.Name)
+		if err != nil {
+			return false, err
+		}
+		return tf.ArchiveName == utf8, nil
+	}
+	entry := ziputils.ZipEntry{
+		Name:     zipEntry.Name,
+		Modified: zipEntry.Modified,
+	}
+	hash := ziputils.CalculateHash(index, entry)
+	h := fmt.Sprintf("%x", hash)
+	return tf.ArchiveHash == h, nil
+}
+
+func (tf TargetFile) GetFileName() string {
+	if tf.ExtractName != "" {
+		return tf.ExtractName
+	}
+	if tf.ArchiveName != "" {
+		_, fileName := filepath.Split(tf.ArchiveName)
+		return fileName
+	}
+	if tf.GetTimeFunc == nil {
+		now := time.Now()
+		return now.Format("2006-01-02T1504-07")
+	} else {
+		return tf.GetTime()
+	}
+}
+
 // パラメーターをパースして、3つのパラメーターをまとめたデータを返す
 // エラーが発生した場合は、エラーを返す
 func parseParams() (*UserOption, []cli.Flag) {
@@ -56,6 +100,18 @@ func parseParams() (*UserOption, []cli.Flag) {
 			Value:       "",
 			Usage:       "file to extract from zip",
 			Destination: &uo.FileToExtract.ArchiveName,
+		},
+		&cli.PathFlag{
+			Name:        "s",
+			Value:       "",
+			Usage:       "a hash of a file to extract from zip",
+			Destination: &uo.FileToExtract.ArchiveHash,
+		},
+		&cli.PathFlag{
+			Name:        "n",
+			Value:       "",
+			Usage:       "a name of extracted file",
+			Destination: &uo.FileToExtract.ExtractName,
 		},
 		&cli.PathFlag{
 			Name:        "d",
@@ -172,23 +228,26 @@ func (uo UserOption) OpenZipFile() (*zip.ReadCloser, error) {
 }
 
 func (uo UserOption) PickUpEntry(r *zip.Reader) error {
-	for _, f := range r.File {
+	for i, f := range r.File {
 		// エントリーのファイル名をShiftJISからUTF-8に変換する
-		entryFilename, err := ziputils.SJISToUtf8(f.Name)
+		matches, err := uo.FileToExtract.Matches(i, f)
 		if err != nil {
 			return fmt.Errorf("error at PickupEntry#SJISToUtf8: %w", err)
 		}
 
-		// 展開するファイルと一致する場合に展開する
-		if entryFilename == uo.FileToExtract.ArchiveName {
-			_, file := filepath.Split(uo.FileToExtract.ArchiveName)
-			err = extractFile(f, file, uo.ExtractDir)
-			if err != nil {
-				return fmt.Errorf("error at PickupEntry#extractFile: %w", err)
-			}
-			fmt.Printf("%s was extracted to %s\n", uo.FileToExtract, file)
-			return nil
+		// 指定したファイルでない場合は次のファイルへ
+		if !matches {
+			continue
 		}
+
+		// 展開するファイルと一致する場合に展開する
+		file := uo.FileToExtract.GetFileName()
+		err = extractFile(f, file, uo.ExtractDir)
+		if err != nil {
+			return fmt.Errorf("error at PickupEntry#extractFile: %w", err)
+		}
+		fmt.Printf("%s was extracted to %s\n", uo.FileToExtract, file)
+		return nil
 	}
 	return fmt.Errorf("file not found: %s", uo.FileToExtract)
 }
